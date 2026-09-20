@@ -43,16 +43,21 @@
   h1,h2,h3{font-family:'Sarabun','Noto Sans Thai',sans-serif;margin:0}
   .wrap{max-width:900px;margin:0 auto;padding:0 20px 90px}
 
-  /* ---- scroll progress ---- */
-  #prog{position:fixed;top:env(safe-area-inset-top,0px);left:0;height:3px;width:0;z-index:40;
+  /* ---- scroll progress (transform instead of width: no layout per frame) ---- */
+  #prog{position:fixed;top:env(safe-area-inset-top,0px);left:0;height:3px;width:100%;z-index:40;
+    transform:scaleX(0);transform-origin:0 50%;
     background:linear-gradient(90deg,var(--user),var(--rate),var(--movie));
     box-shadow:0 0 12px color-mix(in srgb,var(--rate) 60%,transparent);
-    transition:width .12s linear}
+    transition:transform .12s linear}
 
+  /* solid bar by default, frosted glass only where it is cheap (pointer devices) */
   nav{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;
-    background:color-mix(in srgb,var(--bg) 90%,transparent);
-    backdrop-filter:blur(10px);border-bottom:1px solid var(--line);overflow-x:auto;
+    background:var(--bg);
+    border-bottom:1px solid var(--line);overflow-x:auto;
     -webkit-overflow-scrolling:touch;scrollbar-width:none}
+  @media (hover:hover){
+    nav{background:color-mix(in srgb,var(--bg) 90%,transparent);backdrop-filter:blur(10px)}
+  }
   nav::-webkit-scrollbar{display:none}
   nav .in{max-width:900px;margin:0 auto;padding:12px 20px;display:flex;gap:8px}
   nav a{flex:none;text-decoration:none;color:var(--soft);font-size:.85rem;
@@ -75,6 +80,11 @@
     background:var(--panel);overflow:hidden;position:relative;
     opacity:0;animation:fadeUp .9s ease 1.15s forwards}
   .hero-anim svg{display:block;width:100%;height:auto}
+  /* colors live in CSS so the script only toggles a class */
+  .hero-anim rect{fill:var(--panel2)}
+  .hero-anim text{fill:var(--soft)}
+  .hero-anim rect.hot{fill:color-mix(in srgb,var(--rate) 38%,transparent)}
+  .hero-anim text.hot{fill:var(--rate)}
   .hero-anim::after{content:"";position:absolute;inset:0;pointer-events:none;
     background:linear-gradient(100deg,transparent 35%,color-mix(in srgb,var(--rate) 22%,transparent) 50%,transparent 65%);
     transform:translateX(-120%);animation:sheen 5.5s ease-in-out 2s infinite}
@@ -86,6 +96,10 @@
   @keyframes bob{0%,100%{transform:rotate(45deg) translate(0,0)}50%{transform:rotate(45deg) translate(4px,4px)}}
 
   section{margin-top:70px;scroll-margin-top:84px}
+  /* enabled from JS after real section heights are measured (see bottom of script) */
+  body.cv section.mod{content-visibility:auto;padding-bottom:28px;margin-bottom:-28px}
+  .mod:not(.seen) .bar-fill::after{animation-play-state:paused}
+
   .head .kicker{font-size:.8rem;font-weight:600;letter-spacing:.02em;color:var(--soft);margin-bottom:6px}
   .head h2{font-size:1.5rem;font-weight:700;position:relative;display:inline-block}
   .head h2::after{content:"";position:absolute;left:0;bottom:-6px;height:2px;width:0;
@@ -221,14 +235,15 @@
   .strength{margin-top:14px}
   .thumbstrip{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
 
-  /* pagerank bars + link table */
+  /* pagerank bars + link table (bars scale with transform, so no layout per frame) */
   .bars{display:flex;flex-direction:column;gap:14px}
   .bar-row{transition:transform .45s cubic-bezier(.2,.8,.25,1)}
   .bar-row .bl{display:flex;justify-content:space-between;font-size:.86rem;color:var(--soft);margin-bottom:5px}
   .bar-row .bl b{font-family:'IBM Plex Mono',monospace;color:var(--ink)}
   .bar-track{height:14px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;overflow:hidden;position:relative}
-  .bar-fill{height:100%;background:linear-gradient(90deg,var(--user),var(--rate));width:0;
-    transition:width .55s cubic-bezier(.2,.8,.25,1);position:relative}
+  .bar-fill{height:100%;background:linear-gradient(90deg,var(--user),var(--rate));width:100%;
+    transform:scaleX(0);transform-origin:0 50%;
+    transition:transform .55s cubic-bezier(.2,.8,.25,1);position:relative}
   .bar-fill::after{content:"";position:absolute;inset:0;
     background:linear-gradient(90deg,transparent,rgba(255,255,255,.45),transparent);
     transform:translateX(-100%);animation:barSheen 2.4s ease-in-out infinite}
@@ -270,8 +285,9 @@
   .toggles{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
   .rtbar{height:6px;border-radius:4px;background:var(--panel2);border:1px solid var(--line);
     overflow:hidden;margin-top:12px}
-  .rtbar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--movie),var(--rate));
-    transition:width .1s linear}
+  .rtbar i{display:block;height:100%;width:100%;transform:scaleX(0);transform-origin:0 50%;
+    background:linear-gradient(90deg,var(--movie),var(--rate));
+    transition:transform .1s linear}
   .savebtn{display:none}
   .savebtn.on{display:inline-flex}
   .holdhint{font-size:.74rem;color:var(--soft);margin-top:6px}
@@ -935,6 +951,27 @@
 <script>
 const REDUCE = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+/* ---------- theme colors: read once, refresh only when the theme changes ---------- */
+const C = {};
+const COLOR_KEYS = ['--soft','--rate','--ink','--movie','--hot','--ok','--cool','--user','--panel','--panel2'];
+function refreshColors(){
+  const s = getComputedStyle(document.documentElement);
+  COLOR_KEYS.forEach(k => { C[k] = s.getPropertyValue(k).trim(); });
+  window.dispatchEvent(new Event('themechange'));   // static canvases redraw themselves
+}
+const css = k => C[k];
+refreshColors();
+new MutationObserver(refreshColors).observe(document.documentElement, {attributes:true, attributeFilter:['data-theme']});
+(function(){
+  const mq = window.matchMedia('(prefers-color-scheme: light)');
+  if(mq.addEventListener) mq.addEventListener('change', refreshColors);
+  else if(mq.addListener) mq.addListener(refreshColors);
+})();
+
+/* ---------- only touch the DOM when the value actually changed ---------- */
+function setHTML(el, h){ if(el._h !== h){ el._h = h; el.innerHTML = h; } }
+function setText(el, t){ if(el._t !== t){ el._t = t; el.textContent = t; } }
+
 /* ---------- shared image loading (mobile friendly) ---------- */
 const IMGLIMIT = (function(){
   const small = Math.min(screen.width, screen.height) < 820;
@@ -1003,16 +1040,34 @@ function wireDrop(box, onFile){
   box.tabIndex = 0;
 }
 
-/* ---------- run animation loops only while visible (saves battery on phones) ---------- */
+/* Runs `fn` once per frame, but only while its element is on screen.
+   One shared requestAnimationFrame loop and one shared IntersectionObserver for the whole page,
+   and the loop stops completely when nothing visible needs it. */
+const TASKS = [];
+const TASK_BY_EL = new Map();
+let pumping = false;
+function pump(){
+  pumping = false;
+  if(document.hidden) return;
+  let any = false;
+  for(let i=0;i<TASKS.length;i++) if(TASKS[i].vis){ any = true; break; }
+  if(!any) return;
+  pumping = true;
+  requestAnimationFrame(pump);
+  for(let i=0;i<TASKS.length;i++) if(TASKS[i].vis){ try{ TASKS[i].fn(); }catch(e){ console.error(e); } }
+}
+function wake(){ if(!pumping){ pumping = true; requestAnimationFrame(pump); } }
+document.addEventListener('visibilitychange', wake);
+const VIS_IO = ('IntersectionObserver' in window)
+  ? new IntersectionObserver(es=>{
+      es.forEach(e=>{ const t = TASK_BY_EL.get(e.target); if(t) t.vis = e.isIntersecting; });
+      wake();
+    }, {rootMargin:'140px'})
+  : null;
 function loopIn(el, fn){
-  let vis = !('IntersectionObserver' in window);
-  if(!vis){
-    new IntersectionObserver(es=>{ vis = es[0].isIntersecting; }, {rootMargin:'140px'}).observe(el);
-  }
-  (function tick(){
-    if(vis && !document.hidden) fn();
-    requestAnimationFrame(tick);
-  })();
+  const t = {fn, vis: !VIS_IO};
+  TASKS.push(t); TASK_BY_EL.set(el, t);
+  if(VIS_IO) VIS_IO.observe(el); else wake();
 }
 
 /* ---------- viewer file saving (only when the runtime offers it) ---------- */
@@ -1083,20 +1138,23 @@ document.addEventListener('pointerdown', e=>{
   });
 })();
 
-/* ---------- scroll progress + back to top ---------- */
+/* ---------- scroll progress + back to top (no layout reads while scrolling) ---------- */
 (function(){
   const bar=document.getElementById('prog'), top=document.getElementById('topBtn');
   top.addEventListener('click',()=>window.scrollTo({top:0,behavior:REDUCE?'auto':'smooth'}));
-  let tick=false;
+  let max=0, tick=false, shown=false;
+  const measure=()=>{ max=document.documentElement.scrollHeight-window.innerHeight; };
   function upd(){
-    const max=document.documentElement.scrollHeight-window.innerHeight;
     const y=window.scrollY;
-    bar.style.width=(max>0? (y/max*100):0)+'%';
-    top.classList.toggle('show', y>700);
+    bar.style.transform='scaleX('+(max>0? Math.min(1,y/max):0)+')';
+    const s=y>700;
+    if(s!==shown){ shown=s; top.classList.toggle('show', s); }
     tick=false;
   }
   window.addEventListener('scroll',()=>{ if(!tick){ tick=true; requestAnimationFrame(upd);} },{passive:true});
-  upd();
+  window.addEventListener('resize',()=>{ measure(); upd(); });
+  if('ResizeObserver' in window) new ResizeObserver(()=>{ measure(); upd(); }).observe(document.body);
+  measure(); upd();
 })();
 
 /* ---------- reveal sections + panels, and highlight nav ---------- */
@@ -1120,6 +1178,7 @@ document.addEventListener('pointerdown', e=>{
     panels.forEach(p=>io2.observe(p));
   }
 
+  const nav=document.querySelector('nav');
   const links=[...document.querySelectorAll('nav a')];
   const io3=new IntersectionObserver(es=>{
     es.forEach(e=>{
@@ -1128,14 +1187,17 @@ document.addEventListener('pointerdown', e=>{
       links.forEach(a=>{
         const on=a.getAttribute('href')===id;
         a.classList.toggle('here',on);
-        if(on) a.scrollIntoView({block:'nearest',inline:'center',behavior:REDUCE?'auto':'smooth'});
+        if(on){
+          /* scroll only the nav strip; scrollIntoView could nudge the whole page */
+          nav.scrollTo({left:a.offsetLeft-nav.clientWidth/2+a.offsetWidth/2, behavior:REDUCE?'auto':'smooth'});
+        }
       });
     });
   },{rootMargin:'-45% 0px -50% 0px'});
   sections.forEach(s=>io3.observe(s));
 })();
 
-/* ---------- hero animation: drifting number grid ---------- */
+/* ---------- hero animation: drifting number grid (class toggles only) ---------- */
 (function(){
   const g=document.getElementById('heroDots');
   const ns='http://www.w3.org/2000/svg';
@@ -1147,17 +1209,15 @@ document.addEventListener('pointerdown', e=>{
       rect.setAttribute('x',x); rect.setAttribute('y',y);
       rect.setAttribute('width',30); rect.setAttribute('height',26);
       rect.setAttribute('rx',5);
-      rect.setAttribute('fill','var(--panel2)');
       g.appendChild(rect);
       const t=document.createElementNS(ns,'text');
       t.setAttribute('x',x+15); t.setAttribute('y',y+18);
       t.setAttribute('text-anchor','middle');
       t.setAttribute('font-family','IBM Plex Mono, monospace');
       t.setAttribute('font-size','12');
-      t.setAttribute('fill','var(--soft)');
       t.textContent=Math.floor(Math.random()*10);
       g.appendChild(t);
-      items.push({rect,t,c,r});
+      items.push({rect,t,c,r,hot:false});
     }
   }
   if(REDUCE) return;
@@ -1169,12 +1229,15 @@ document.addEventListener('pointerdown', e=>{
         const it=items[Math.floor(Math.random()*items.length)];
         it.t.textContent=Math.floor(Math.random()*10);
       }
-      items.forEach(it=>{
-        const d=Math.abs(it.c - wave);
-        const hot=d<1.6;
-        it.rect.setAttribute('fill', hot?'color-mix(in srgb,var(--rate) 38%,transparent)':'var(--panel2)');
-        it.t.setAttribute('fill', hot?'var(--rate)':'var(--soft)');
-      });
+      for(let i=0;i<items.length;i++){
+        const it=items[i];
+        const hot=Math.abs(it.c - wave)<1.6;
+        if(hot!==it.hot){
+          it.hot=hot;
+          it.rect.classList.toggle('hot',hot);
+          it.t.classList.toggle('hot',hot);
+        }
+      }
     }
   }
   loopIn(document.querySelector('.hero-anim'), ()=>frame(performance.now()));
@@ -1313,7 +1376,6 @@ document.addEventListener('pointerdown', e=>{
   const ang=document.getElementById('angle'), lab=document.getElementById('angLab'),
         read=document.getElementById('cxRead');
   let spinning=false, trail=[];
-  function css(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
 
   function draw(){
     const W=cv.width, H=cv.height, cx=W/2, cy=H/2, R=210;
@@ -1360,8 +1422,8 @@ document.addEventListener('pointerdown', e=>{
     ctx.fillText('Re', W-56, cy-14);
     ctx.fillText('Im', cx+14, 40);
 
-    lab.textContent=deg+'°';
-    read.innerHTML='คูณด้วย <b>'+c.toFixed(2)+' '+(s<0?'−':'+')+' '+Math.abs(s).toFixed(2)+'i</b>';
+    setText(lab, deg+'°');
+    setHTML(read, 'คูณด้วย <b>'+c.toFixed(2)+' '+(s<0?'−':'+')+' '+Math.abs(s).toFixed(2)+'i</b>');
   }
   ang.addEventListener('input',()=>{spinning=false;draw();});
   document.querySelectorAll('#rot2d .chip').forEach(ch=>{
@@ -1383,6 +1445,7 @@ document.addEventListener('pointerdown', e=>{
     spinning=!spinning;
     e.target.textContent = spinning ? 'หยุดหมุน' : 'หมุนอัตโนมัติ';
   });
+  window.addEventListener('themechange',draw);
   draw();
   loopIn(cv, ()=>{
     if(spinning) ang.value=(+ang.value+1)%361;
@@ -1397,7 +1460,6 @@ document.addEventListener('pointerdown', e=>{
         read=document.getElementById('qRead');
   const axs={x:document.getElementById('ax'),y:document.getElementById('ay'),z:document.getElementById('az')};
   let spinning=false;
-  function css(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
 
   const V=[[-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],[-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1]];
   const E=[[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
@@ -1419,7 +1481,7 @@ document.addEventListener('pointerdown', e=>{
   function draw(){
     const W=cv.width,H=cv.height,cx=W/2,cy=H/2,S=110;
     ctx.clearRect(0,0,W,H);
-    const soft=css('--soft'), rate=css('--rate'), movie=css('--movie');
+    const rate=css('--rate'), movie=css('--movie');
 
     let ax=+axs.x.value, ay=+axs.y.value, az=+axs.z.value;
     let len=Math.hypot(ax,ay,az) || 1;
@@ -1467,9 +1529,9 @@ document.addEventListener('pointerdown', e=>{
     });
     ctx.globalAlpha=1;
 
-    qLab.textContent=deg+'°';
+    setText(qLab, deg+'°');
     const f=n=>(n<0?'− ':'+ ')+Math.abs(n).toFixed(2);
-    read.innerHTML='q = <b>'+q[0].toFixed(2)+' '+f(q[1])+'i '+f(q[2])+'j '+f(q[3])+'k</b>';
+    setHTML(read, 'q = <b>'+q[0].toFixed(2)+' '+f(q[1])+'i '+f(q[2])+'j '+f(q[3])+'k</b>');
   }
   [qa,axs.x,axs.y,axs.z].forEach(el=>el.addEventListener('input',()=>{if(el===qa)spinning=false;draw();}));
   document.querySelectorAll('#rot3d .chip[data-ax]').forEach(ch=>{
@@ -1494,11 +1556,9 @@ document.addEventListener('pointerdown', e=>{
     spinning=!spinning;
     e.target.textContent = spinning ? 'หยุดหมุน' : 'หมุนอัตโนมัติ';
   });
-  function loop(){
-    if(spinning){ qa.value=(+qa.value+1)%361; draw(); }
-    requestAnimationFrame(loop);
-  }
-  draw(); requestAnimationFrame(loop);
+  window.addEventListener('themechange',draw);
+  draw();
+  loopIn(cv, ()=>{ if(spinning){ qa.value=(+qa.value+1)%361; draw(); } });
 })();
 
 /* ---------- 5. ray tracing ---------- */
@@ -1507,14 +1567,13 @@ document.addEventListener('pointerdown', e=>{
   const lx=document.getElementById('lightx'), read=document.getElementById('rayRead'),
         lab=document.getElementById('lightLab'), tiltEl=document.getElementById('surfTilt'),
         tiltLab=document.getElementById('tiltLab');
-  function css(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
   let t=0;
   const groundY=340;
 
   function draw(){
     const W=cv.width,H=cv.height;
     ctx.clearRect(0,0,W,H);
-    const soft=css('--soft'), rate=css('--rate'), hot=css('--hot'), ok=css('--ok'), cool=css('--cool');
+    const soft=css('--soft'), hot=css('--hot'), ok=css('--ok'), cool=css('--cool');
 
     const tdeg=+tiltEl.value, trad=tdeg*Math.PI/180;
     const gx=Math.cos(trad), gy=Math.sin(trad);
@@ -1526,7 +1585,9 @@ document.addEventListener('pointerdown', e=>{
     ctx.strokeStyle=soft; ctx.globalAlpha=.4; ctx.lineWidth=3;
     ctx.beginPath(); ctx.moveTo(-half,0); ctx.lineTo(half,0); ctx.stroke();
     ctx.globalAlpha=.18; ctx.lineWidth=2;
-    for(let x=-half;x<half;x+=22){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x-14,20); ctx.stroke(); }
+    ctx.beginPath();
+    for(let x=-half;x<half;x+=22){ ctx.moveTo(x,0); ctx.lineTo(x-14,20); }
+    ctx.stroke();
     ctx.restore();
     ctx.globalAlpha=1;
 
@@ -1569,20 +1630,20 @@ document.addEventListener('pointerdown', e=>{
 
     ctx.fillStyle=soft; ctx.beginPath(); ctx.arc(hitX,hitY,6,0,Math.PI*2); ctx.fill();
 
-    read.innerHTML='มุมตกกระทบ <b>'+incidence.toFixed(1)+'°</b> · มุมสะท้อน <b>'+incidence.toFixed(1)+'°</b> · D·N = <b>'+dot.toFixed(2)+'</b>';
-    lab.textContent = (+lx.value<35?'ซ้าย':(+lx.value>65?'ขวา':'กลาง'));
-    tiltLab.textContent = tdeg+'°';
+    setHTML(read, 'มุมตกกระทบ <b>'+incidence.toFixed(1)+'°</b> · มุมสะท้อน <b>'+incidence.toFixed(1)+'°</b> · D·N = <b>'+dot.toFixed(2)+'</b>');
+    setText(lab, (+lx.value<35?'ซ้าย':(+lx.value>65?'ขวา':'กลาง')));
+    setText(tiltLab, tdeg+'°');
   }
   [lx,tiltEl].forEach(el=>el.addEventListener('input',draw));
+  window.addEventListener('themechange',draw);
   if(REDUCE){ draw(); } else { loopIn(cv, ()=>{ t+=1.2; draw(); }); }
 })();
 
-/* ---------- 2.5 shape transform ---------- */
+/* ---------- 2.5 shape transform (frame loop only runs while animating) ---------- */
 (function(){
   const cv=document.getElementById('cvShape'), ctx=cv.getContext('2d');
   const Tc=document.getElementById('Tcells'), det=document.getElementById('detRead');
-  function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim()}
-  let T=[1,0,0,1], anim=0, target=[1,0,0,1], from=[1,0,0,1], running=false;
+  let T=[1,0,0,1], anim=0, target=[1,0,0,1], from=[1,0,0,1], running=false, raf=0;
   const inputs=[];
   for(let k=0;k<4;k++){
     const inp=document.createElement('input');
@@ -1597,28 +1658,28 @@ document.addEventListener('pointerdown', e=>{
     ctx.clearRect(0,0,W,H);
     const soft=css('--soft'), rate=css('--rate'), cool=css('--cool');
     ctx.strokeStyle=soft; ctx.globalAlpha=.13; ctx.lineWidth=1.5;
+    ctx.beginPath();
     for(let i=-3;i<=3;i++){
-      ctx.beginPath(); ctx.moveTo(cx+i*S,20); ctx.lineTo(cx+i*S,H-20);
-      ctx.moveTo(20,cy+i*S); ctx.lineTo(W-20,cy+i*S); ctx.stroke();
+      ctx.moveTo(cx+i*S,20); ctx.lineTo(cx+i*S,H-20);
+      ctx.moveTo(20,cy+i*S); ctx.lineTo(W-20,cy+i*S);
     }
+    ctx.stroke();
     // transformed grid lines show what the matrix does to space itself
     ctx.strokeStyle=rate; ctx.globalAlpha=.16; ctx.lineWidth=1.5;
+    ctx.beginPath();
     for(let i=-3;i<=3;i++){
-      ctx.beginPath();
       for(let s=-3;s<=3;s+=0.5){
         const x=T[0]*i+T[1]*s, y=T[2]*i+T[3]*s;
         const px=cx+x*S, py=cy-y*S;
         s===-3?ctx.moveTo(px,py):ctx.lineTo(px,py);
       }
-      ctx.stroke();
-      ctx.beginPath();
       for(let s=-3;s<=3;s+=0.5){
         const x=T[0]*s+T[1]*i, y=T[2]*s+T[3]*i;
         const px=cx+x*S, py=cy-y*S;
         s===-3?ctx.moveTo(px,py):ctx.lineTo(px,py);
       }
-      ctx.stroke();
     }
+    ctx.stroke();
     ctx.globalAlpha=.4; ctx.lineWidth=2; ctx.strokeStyle=soft;
     ctx.beginPath(); ctx.moveTo(20,cy); ctx.lineTo(W-20,cy); ctx.moveTo(cx,20); ctx.lineTo(cx,H-20); ctx.stroke();
     ctx.globalAlpha=1;
@@ -1641,31 +1702,32 @@ document.addEventListener('pointerdown', e=>{
       ctx.fillStyle=rate; ctx.beginPath(); ctx.arc(cx+nx*S,cy-ny*S,7,0,Math.PI*2); ctx.fill();
     });
     const d=T[0]*T[3]-T[1]*T[2];
-    det.innerHTML='det = <b>'+d.toFixed(2)+'</b> · พื้นที่เปลี่ยนไป <b>'+Math.abs(d).toFixed(2)+'</b> เท่า'+
-      (Math.abs(d)<0.001?' (ยุบแบนจนคืนกลับไม่ได้)':(d<0?' (พลิกด้าน)':''));
+    setHTML(det, 'det = <b>'+d.toFixed(2)+'</b> · พื้นที่เปลี่ยนไป <b>'+Math.abs(d).toFixed(2)+'</b> เท่า'+
+      (Math.abs(d)<0.001?' (ยุบแบนจนคืนกลับไม่ได้)':(d<0?' (พลิกด้าน)':'')));
   }
+  function loop(){
+    raf=0;
+    if(!running) return;
+    anim=Math.min(1,anim+(REDUCE?1:0.022));
+    const e=anim<0.5?2*anim*anim:1-Math.pow(-2*anim+2,2)/2;
+    T=from.map((v,i)=>v+(target[i]-v)*e);
+    inputs.forEach((inp,i)=>inp.value=T[i].toFixed(2));
+    draw();
+    if(anim>=1) running=false; else raf=requestAnimationFrame(loop);
+  }
+  function kick(){ if(!raf) raf=requestAnimationFrame(loop); }
   document.querySelectorAll('#shape .chip').forEach(ch=>{
     ch.addEventListener('click',()=>{
       document.querySelectorAll('#shape .chip').forEach(x=>x.classList.remove('on'));
       ch.classList.add('on');
-      from=T.slice(); target=ch.dataset.t.split(',').map(Number); anim=0; running=true;
+      from=T.slice(); target=ch.dataset.t.split(',').map(Number); anim=0; running=true; kick();
     });
   });
   document.getElementById('shapeGo').addEventListener('click',()=>{
-    from=[1,0,0,1]; T=[1,0,0,1]; anim=0; running=true;
+    from=[1,0,0,1]; T=[1,0,0,1]; anim=0; running=true; kick();
   });
-  function loop(){
-    if(running){
-      anim=Math.min(1,anim+(REDUCE?1:0.022));
-      const e=anim<0.5?2*anim*anim:1-Math.pow(-2*anim+2,2)/2;
-      T=from.map((v,i)=>v+(target[i]-v)*e);
-      inputs.forEach((inp,i)=>inp.value=T[i].toFixed(2));
-      draw();
-      if(anim>=1) running=false;
-    }
-    requestAnimationFrame(loop);
-  }
-  draw(); requestAnimationFrame(loop);
+  window.addEventListener('themechange',draw);
+  draw();
 })();
 
 /* ---------- 4.5 convolution + photo filters ---------- */
@@ -1680,6 +1742,7 @@ document.addEventListener('pointerdown', e=>{
         mixLab=document.getElementById('convMixLab');
   const N=22, CELL=440/N;
   const clamp=v=>v<0?0:(v>255?255:v);
+  const PO=new Float32Array(3);   // scratch output for per-pixel filters (no allocation per pixel)
 
   const KERNELS={
     blur:{k:[1/9,1/9,1/9,1/9,1/9,1/9,1/9,1/9,1/9],
@@ -1714,18 +1777,18 @@ document.addEventListener('pointerdown', e=>{
       txt:'สนใจแค่ช่องกลางแล้วคูณให้มากกว่า 1 ทุกพิกเซลจึงสว่างขึ้นโดยไม่เปลี่ยนรายละเอียด'},
     dark:{k:[0,0,0,0,0.6,0,0,0,0], show:['0','0','0','0','0.6','0','0','0','0'],
       txt:'คูณช่องกลางด้วยค่าน้อยกว่า 1 ภาพจึงมืดลงทั้งภาพ'},
-    invert:{point:(r,g,b)=>[255-r,255-g,255-b], show:['—','—','—','—','255−ก','—','—','—','—'],
+    invert:{point:(r,g,b,o)=>{o[0]=255-r;o[1]=255-g;o[2]=255-b;}, show:['—','—','—','—','255−ก','—','—','—','—'],
       txt:'ไม่ใช้เพื่อนบ้านเลย แค่เอา 255 ลบค่าเดิมทีละพิกเซล ได้ฟิล์มเนกาทีฟ'},
-    gray:{point:(r,g,b)=>{const l=0.299*r+0.587*g+0.114*b;return [l,l,l];},
+    gray:{point:(r,g,b,o)=>{const l=0.299*r+0.587*g+0.114*b;o[0]=l;o[1]=l;o[2]=l;},
       show:['—','—','—','.299','.587','.114','—','—','—'],
       txt:'ถ่วงน้ำหนักสามช่องสีตามความไวของตามนุษย์ เขียวมีน้ำหนักมากสุดเพราะตาเราไวกับเขียวที่สุด'},
-    threshold:{point:(r,g,b)=>{const l=0.299*r+0.587*g+0.114*b>128?255:0;return [l,l,l];},
+    threshold:{point:(r,g,b,o)=>{const l=0.299*r+0.587*g+0.114*b>128?255:0;o[0]=l;o[1]=l;o[2]=l;},
       show:['—','—','—','>128','?','255:0','—','—','—'],
       txt:'ตัดทุกพิกเซลเหลือขาวหรือดำอย่างเดียว เป็นขั้นแรกของการอ่านตัวอักษรจากภาพถ่าย'},
-    posterize:{point:(r,g,b)=>[Math.round(r/64)*64,Math.round(g/64)*64,Math.round(b/64)*64],
+    posterize:{point:(r,g,b,o)=>{o[0]=Math.round(r/64)*64;o[1]=Math.round(g/64)*64;o[2]=Math.round(b/64)*64;},
       show:['—','—','—','ปัด','/64','×64','—','—','—'],
       txt:'ปัดค่าสีให้เหลือไม่กี่ระดับ ได้ภาพแบบโปสเตอร์สกรีนที่ไล่เฉดหายไป'},
-    noise:{point:(r,g,b)=>{const n=(Math.random()-0.5)*70;return [r+n,g+n,b+n];},
+    noise:{point:(r,g,b,o)=>{const n=(Math.random()-0.5)*70;o[0]=r+n;o[1]=g+n;o[2]=b+n;},
       show:['—','—','—','ก','+','สุ่ม','—','—','—'],
       txt:'บวกค่าสุ่มเข้าไปทุกพิกเซล ได้เกรนแบบฟิล์ม และเป็นวิธีทดสอบว่าฟิลเตอร์ลดนอยส์ทำงานดีแค่ไหน'}
   };
@@ -1733,6 +1796,7 @@ document.addEventListener('pointerdown', e=>{
   let cur='blur', anim=null, mode='demo';
   let base=[], img=[];
   let photoBase=null, photoW=0, photoH=0, photoInfo='';
+  let convCache=null;   // {k, r, g, b}: kernel result for the current photo, so the strength slider only blends
 
   function makeImage(){
     base=[];
@@ -1757,7 +1821,7 @@ document.addEventListener('pointerdown', e=>{
       ctx.fillRect(c*CELL,r*CELL,CELL+0.6,CELL+0.6);
     }
     if(hl){
-      ctx.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue('--movie').trim();
+      ctx.strokeStyle=css('--movie');
       ctx.lineWidth=3;
       ctx.strokeRect((hl[1]-1)*CELL,(hl[0]-1)*CELL,CELL*3,CELL*3);
     }
@@ -1782,7 +1846,8 @@ document.addEventListener('pointerdown', e=>{
     if(def.point){
       for(let r=0;r<N;r++) for(let c=0;c<N;c++){
         const v=src[r][c];
-        out[r][c]=def.point(v,v,v)[0];
+        def.point(v,v,v,PO);
+        out[r][c]=PO[0];
       }
     } else {
       for(let r=1;r<N-1;r++) for(let c=1;c<N-1;c++){
@@ -1805,49 +1870,59 @@ document.addEventListener('pointerdown', e=>{
       drawImg([r,c]);
     },16);
   }
-  function convolveChannel(src,w,h,ch,kernel){
+  /* 3×3 convolution of one channel. Kernel weights and row offsets are hoisted out of the pixel loop,
+     and edge pixels reuse the nearest valid neighbour (same result as clamping each sample). */
+  function convolveChannel(src,w,h,ch,k){
     const out=new Float32Array(w*h);
-    for(let y=0;y<h;y++) for(let x=0;x<w;x++){
-      let s=0,i=0;
-      for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){
-        const yy=y+dy<0?0:(y+dy>h-1?h-1:y+dy), xx=x+dx<0?0:(x+dx>w-1?w-1:x+dx);
-        s+=src[(yy*w+xx)*4+ch]*kernel[i++];
+    const k0=k[0],k1=k[1],k2=k[2],k3=k[3],k4=k[4],k5=k[5],k6=k[6],k7=k[7],k8=k[8];
+    const stride=w*4;
+    for(let y=0;y<h;y++){
+      const a=(y>0?y-1:0)*stride, b=y*stride, c=(y<h-1?y+1:h-1)*stride;
+      const o=y*w;
+      for(let x=0;x<w;x++){
+        const xm=(x>0?x-1:0)*4+ch, x0=x*4+ch, xp=(x<w-1?x+1:w-1)*4+ch;
+        out[o+x]=src[a+xm]*k0+src[a+x0]*k1+src[a+xp]*k2
+               +src[b+xm]*k3+src[b+x0]*k4+src[b+xp]*k5
+               +src[c+xm]*k6+src[c+x0]*k7+src[c+xp]*k8;
       }
-      out[y*w+x]=s;
     }
     return out;
   }
   function computePhoto(){
     const def=KERNELS[cur], m=+mix.value/100;
     const w=photoW,h=photoH, src=photoBase.data;
-    const outI=ctx.createImageData(w,h), o=outI.data;
+    const outI=ctx.createImageData(w,h), o=outI.data;   // Uint8ClampedArray clamps for us
     if(def.point){
       for(let i=0;i<src.length;i+=4){
-        const p=def.point(src[i],src[i+1],src[i+2]);
-        o[i]=clamp(src[i]*(1-m)+p[0]*m);
-        o[i+1]=clamp(src[i+1]*(1-m)+p[1]*m);
-        o[i+2]=clamp(src[i+2]*(1-m)+p[2]*m);
+        def.point(src[i],src[i+1],src[i+2],PO);
+        o[i]  =src[i]  *(1-m)+PO[0]*m;
+        o[i+1]=src[i+1]*(1-m)+PO[1]*m;
+        o[i+2]=src[i+2]*(1-m)+PO[2]*m;
         o[i+3]=255;
       }
     } else {
-      const rC=convolveChannel(src,w,h,0,def.k);
-      const gC=convolveChannel(src,w,h,1,def.k);
-      const bC=convolveChannel(src,w,h,2,def.k);
-      for(let p=0;p<w*h;p++){
-        o[p*4]  =clamp(src[p*4]  *(1-m)+rC[p]*m);
-        o[p*4+1]=clamp(src[p*4+1]*(1-m)+gC[p]*m);
-        o[p*4+2]=clamp(src[p*4+2]*(1-m)+bC[p]*m);
-        o[p*4+3]=255;
+      if(!convCache || convCache.k!==cur){
+        convCache={k:cur,
+          r:convolveChannel(src,w,h,0,def.k),
+          g:convolveChannel(src,w,h,1,def.k),
+          b:convolveChannel(src,w,h,2,def.k)};
+      }
+      const rC=convCache.r, gC=convCache.g, bC=convCache.b;
+      for(let p=0,n=w*h;p<n;p++){
+        const i=p*4;
+        o[i]  =src[i]  *(1-m)+rC[p]*m;
+        o[i+1]=src[i+1]*(1-m)+gC[p]*m;
+        o[i+2]=src[i+2]*(1-m)+bC[p]*m;
+        o[i+3]=255;
       }
     }
     return outI;
   }
   let wipeReq=null;
-  function applyPhoto(animate){
+  function applyPhoto(animate, quiet){
     if(!photoBase) return;
     cancelAnimationFrame(wipeReq);
-    busy.classList.add('on');
-    setTimeout(()=>{
+    const run=()=>{
       const outI=computePhoto();
       busy.classList.remove('on');
       lab.textContent='หลังใช้ฟิลเตอร์ · ความแรง '+mix.value+'% · '+photoW+'×'+photoH+' พิกเซล';
@@ -1864,7 +1939,10 @@ document.addEventListener('pointerdown', e=>{
         if(x<photoW) wipeReq=requestAnimationFrame(wipe);
         else ctx.putImageData(outI,0,0);
       })();
-    }, 30);
+    };
+    if(quiet){ run(); return; }          // slider drags: no spinner, no timer
+    busy.classList.add('on');
+    setTimeout(run, 30);
   }
   function resetPhoto(){
     if(!photoBase) return;
@@ -1884,6 +1962,7 @@ document.addEventListener('pointerdown', e=>{
       const fit=fitToCanvas(dec, cv, ctx);
       photoW=fit.w; photoH=fit.h;
       photoBase=ctx.getImageData(0,0,photoW,photoH);
+      convCache=null;
       dec.revoke();
       mode='photo';
       cv.classList.remove('swap'); void cv.offsetWidth; cv.classList.add('swap');
@@ -1901,7 +1980,7 @@ document.addEventListener('pointerdown', e=>{
     });
   }
   function backToDemo(){
-    mode='demo'; photoBase=null; upInput.value=''; camInput.value='';
+    mode='demo'; photoBase=null; convCache=null; upInput.value=''; camInput.value='';
     cancelAnimationFrame(wipeReq); clearInterval(anim);
     cv.width=440; cv.height=440; cv.style.aspectRatio='1';
     goBtn.textContent='ทาบ kernel ทีละช่อง';
@@ -1918,9 +1997,14 @@ document.addEventListener('pointerdown', e=>{
       if(mode==='photo') applyPhoto(true); else applyDemo(true);
     });
   });
+  let mixQ=0;   // at most one recompute per frame while dragging
   mix.addEventListener('input',()=>{
     mixLab.textContent=mix.value+'%';
-    if(mode==='photo') applyPhoto(false); else applyDemo(false);
+    if(mixQ) return;
+    mixQ=requestAnimationFrame(()=>{
+      mixQ=0;
+      if(mode==='photo') applyPhoto(false,true); else applyDemo(false);
+    });
   });
   goBtn.addEventListener('click',()=>{ mode==='photo' ? applyPhoto(true) : applyDemo(true); });
   resetBtn.addEventListener('click',()=>{
@@ -1938,7 +2022,7 @@ document.addEventListener('pointerdown', e=>{
     if(mode==='photo' && photoBase) ctx.putImageData(photoBase,0,0);
     else { img=base.map(r=>r.slice()); drawImg(); }
   }
-  function showFiltered(){ mode==='photo' ? applyPhoto(false) : applyDemo(false); }
+  function showFiltered(){ mode==='photo' ? applyPhoto(false,true) : applyDemo(false); }
   ['pointerdown','touchstart'].forEach(ev=>holdBtn.addEventListener(ev,e=>{e.preventDefault();showOriginal();}));
   ['pointerup','pointerleave','pointercancel','touchend'].forEach(ev=>holdBtn.addEventListener(ev,showFiltered));
   registerSave(document.getElementById('convSave'), ()=>cv, 'convolution.png');
@@ -1951,7 +2035,6 @@ document.addEventListener('pointerdown', e=>{
   const cv=document.getElementById('cvRank'), ctx=cv.getContext('2d');
   const barsEl=document.getElementById('rankBars'), read=document.getElementById('rankRead'),
         tbl=document.getElementById('linkTable');
-  function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim()}
   const names=['Google','eBay','Yahoo','Wiki'];
   const n=4;
   let L=[[0,1,1,0],[1,0,0,0],[1,0,0,1],[0,1,0,0]];
@@ -1982,13 +2065,14 @@ document.addEventListener('pointerdown', e=>{
         '<div class="bar-track"><div class="bar-fill"></div></div>';
       barsEl.appendChild(d);
       const f=d.querySelector('.bar-fill');
-      requestAnimationFrame(()=>{ f.style.width=Math.min(100,o.v*180)+'%'; });
+      requestAnimationFrame(()=>{ f.style.transform='scaleX('+Math.min(1,o.v*1.8)+')'; });
     });
+    if(REDUCE){ shown=p.slice(); drawGraph(); }
   }
   function drawGraph(){
     const W=cv.width,H=cv.height;
     ctx.clearRect(0,0,W,H);
-    const soft=css('--soft'), rate=css('--rate');
+    const soft=css('--soft'), rate=css('--rate'), ink=css('--ink');
     shown=shown.map((v,i)=>v+(p[i]-v)*0.12);
     for(let i=0;i<n;i++) for(let j=0;j<n;j++){
       if(!L[i][j]) continue;
@@ -2021,7 +2105,7 @@ document.addEventListener('pointerdown', e=>{
       ctx.globalAlpha=1;
       ctx.strokeStyle=rate; ctx.lineWidth=4;
       ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.stroke();
-      ctx.fillStyle=css('--ink'); ctx.textAlign='center';
+      ctx.fillStyle=ink; ctx.textAlign='center';
       ctx.font='600 20px "Noto Sans Thai", sans-serif';
       ctx.fillText(names[i], x, y+6);
       ctx.fillStyle=soft; ctx.font='500 16px "IBM Plex Mono", monospace';
@@ -2058,6 +2142,7 @@ document.addEventListener('pointerdown', e=>{
     },550);
   });
   document.getElementById('rankReset').addEventListener('click',reset);
+  window.addEventListener('themechange',drawGraph);
   reset();
   if(REDUCE) drawGraph(); else loopIn(cv, ()=>{ flow=(flow+0.006)%1; drawGraph(); });
 })();
@@ -2126,7 +2211,7 @@ document.addEventListener('pointerdown', e=>{
     document.getElementById('pbbL').textContent=pbb.value+'%';
     if(fills.length!==p.length) build();
     p.forEach((v,i)=>{
-      fills[i].fill.style.width=(v*100)+'%';
+      fills[i].fill.style.transform='scaleX('+v+')';
       fills[i].num.textContent=(v*100).toFixed(1)+'%';
     });
   }
@@ -2187,7 +2272,7 @@ document.addEventListener('pointerdown', e=>{
       });
       built=true;
     }
-    total.forEach((v,j)=>{ fills[j].f.style.width=(v/max*100)+'%'; fills[j].n.textContent=v.toFixed(1); });
+    total.forEach((v,j)=>{ fills[j].f.style.transform='scaleX('+(v/max)+')'; fills[j].n.textContent=v.toFixed(1); });
     const cost=total.reduce((s,v,j)=>s+v*costPerUnit[j],0);
     document.getElementById('costRead').innerHTML=
       'คูณอีกครั้งด้วยเวกเตอร์ราคาต่อหน่วย → ต้นทุนวัตถุดิบรวมวันนี้ <b>'+Math.round(cost).toLocaleString()+'</b> บาท';
@@ -2252,7 +2337,6 @@ document.addEventListener('pointerdown', e=>{
         drop=document.getElementById('colorDrop'), busy=document.getElementById('colorBusy'),
         lab=document.getElementById('colorLab'), mix=document.getElementById('colorMix'),
         mixLab=document.getElementById('colorMixLab');
-  const clamp=v=>v<0?0:(v>255?255:v);
   const M={
     orig:{m:[1,0,0,0,1,0,0,0,1],txt:'เมทริกซ์เอกลักษณ์ ไม่แปลงอะไร แต่ละช่องสีคงค่าเดิม'},
     gray:{m:[.299,.587,.114,.299,.587,.114,.299,.587,.114],txt:'ทุกแถวเหมือนกัน ทุกช่องจึงได้ค่าเฉลี่ยถ่วงน้ำหนักเท่ากัน สีจึงหายไปหมด'},
@@ -2299,15 +2383,15 @@ document.addEventListener('pointerdown', e=>{
     setHint('รองรับ JPG · PNG · HEIC · WebP — ประมวลผลในเครื่องคุณเท่านั้น ไม่ส่งขึ้นเซิร์ฟเวอร์ ลากรูปมาวาง หรือกด Ctrl+V ก็ได้');
   }
   function compute(){
-    const m=M[cur].m, a=+mix.value/100;
+    const m=M[cur].m, a=+mix.value/100, ia=1-a;
+    const m0=m[0]*a,m1=m[1]*a,m2=m[2]*a,m3=m[3]*a,m4=m[4]*a,m5=m[5]*a,m6=m[6]*a,m7=m[7]*a,m8=m[8]*a;
     const src=base.data;
-    const outI=ctx.createImageData(cv.width,cv.height), o=outI.data;
+    const outI=ctx.createImageData(base.width,base.height), o=outI.data;   // clamped array: no clamp() needed
     for(let i=0;i<src.length;i+=4){
       const r=src[i],g=src[i+1],b=src[i+2];
-      const nr=m[0]*r+m[1]*g+m[2]*b, ng=m[3]*r+m[4]*g+m[5]*b, nb=m[6]*r+m[7]*g+m[8]*b;
-      o[i]  =clamp(r*(1-a)+nr*a);
-      o[i+1]=clamp(g*(1-a)+ng*a);
-      o[i+2]=clamp(b*(1-a)+nb*a);
+      o[i]  =r*ia+m0*r+m1*g+m2*b;
+      o[i+1]=g*ia+m3*r+m4*g+m5*b;
+      o[i+2]=b*ia+m6*r+m7*g+m8*b;
       o[i+3]=255;
     }
     return outI;
@@ -2367,7 +2451,12 @@ document.addEventListener('pointerdown', e=>{
       ch.classList.add('on'); cur=ch.dataset.c; renderMatrix(); apply(true);
     });
   });
-  mix.addEventListener('input',()=>{ mixLab.textContent=mix.value+'%'; apply(false); });
+  let mixQ=0;   // at most one recompute per frame while dragging
+  mix.addEventListener('input',()=>{
+    mixLab.textContent=mix.value+'%';
+    if(mixQ) return;
+    mixQ=requestAnimationFrame(()=>{ mixQ=0; apply(false); });
+  });
   [upInput,camInput].forEach(el=>el.addEventListener('change',e=>{
     const f=e.target.files && e.target.files[0];
     if(f) loadPhoto(f);
@@ -2391,14 +2480,13 @@ document.addEventListener('pointerdown', e=>{
   const r1=document.getElementById('r1'), r2=document.getElementById('r2'),
         r3=document.getElementById('r3'), r4=document.getElementById('r4'),
         read=document.getElementById('routeRead');
-  function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim()}
   const nodes={ home:[80,210], market:[280,90], school:[280,330], work:[470,210] };
   const labels={home:'บ้าน',market:'ตลาด',school:'โรงเรียน',work:'ที่ทำงาน'};
   let t=0;
   function draw(){
     const W=cv.width,H=cv.height;
     ctx.clearRect(0,0,W,H);
-    const soft=css('--soft'), rate=css('--rate'), ink=css('--ink');
+    const soft=css('--soft'), rate=css('--rate'), ink=css('--ink'), panel=css('--panel'), panel2=css('--panel2');
     const dA1=+r1.value||0, dA2=+r2.value||0, dB1=+r3.value||0, dB2=+r4.value||0;
     const totalA=dA1+dA2, totalB=dB1+dB2;
     const aShort = totalA<totalB, bShort = totalB<totalA;
@@ -2415,7 +2503,7 @@ document.addEventListener('pointerdown', e=>{
       ctx.font='600 16px "IBM Plex Mono", monospace';
       ctx.textAlign='center';
       ctx.fillRect(mx-22,my-13,44,22);
-      ctx.fillStyle=css('--panel');
+      ctx.fillStyle=panel;
       ctx.fillRect(mx-21,my-12,42,20);
       ctx.fillStyle= hot? rate : soft;
       ctx.fillText(dist+' กม.', mx, my+5);
@@ -2439,7 +2527,7 @@ document.addEventListener('pointerdown', e=>{
 
     Object.keys(nodes).forEach(k=>{
       const x=nodes[k][0], y=nodes[k][1];
-      ctx.fillStyle=css('--panel2'); ctx.strokeStyle=soft; ctx.lineWidth=2;
+      ctx.fillStyle=panel2; ctx.strokeStyle=soft; ctx.lineWidth=2;
       ctx.beginPath(); ctx.arc(x,y,30,0,Math.PI*2); ctx.fill(); ctx.stroke();
       ctx.fillStyle=ink; ctx.font='600 14px "Noto Sans Thai", sans-serif';
       ctx.textAlign='center';
@@ -2447,14 +2535,15 @@ document.addEventListener('pointerdown', e=>{
     });
     ctx.textAlign='left';
 
-    read.innerHTML = 'เส้นทาง A (ผ่านตลาด): <b>'+totalA+'</b> กม. · เส้นทาง B (ผ่านโรงเรียน): <b>'+totalB+'</b> กม.'
-      + (aShort ? ' — A สั้นกว่า' : bShort ? ' — B สั้นกว่า' : ' — เท่ากัน');
+    setHTML(read, 'เส้นทาง A (ผ่านตลาด): <b>'+totalA+'</b> กม. · เส้นทาง B (ผ่านโรงเรียน): <b>'+totalB+'</b> กม.'
+      + (aShort ? ' — A สั้นกว่า' : bShort ? ' — B สั้นกว่า' : ' — เท่ากัน'));
   }
   [r1,r2,r3,r4].forEach(i=>i.addEventListener('input',draw));
+  window.addEventListener('themechange',draw);
   if(REDUCE) draw(); else loopIn(cv, ()=>{ t+=1; draw(); });
 })();
 
-/* ---------- 4.2 polygon mesh with real shading ---------- */
+/* ---------- 4.2 polygon mesh (typed arrays, no per-frame allocation except the sort) ---------- */
 (function(){
   const cv=document.getElementById('cvMesh'), ctx=cv.getContext('2d');
   const segEl=document.getElementById('meshSeg'), segLab=document.getElementById('meshSegLab'),
@@ -2465,19 +2554,18 @@ document.addEventListener('pointerdown', e=>{
   let shape='sphere', mode='flat', showEdges=false, showNormals=false, spin=!REDUCE;
   let yaw=0.6, pitch=0.35, mesh=null;
 
-  function css(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
   function hexRGB(h){
     h=h.replace('#','').trim();
     if(h.length===3) h=h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
     const n=parseInt(h,16);
     return isNaN(n)? [185,155,255] : [(n>>16)&255,(n>>8)&255,n&255];
   }
-  function norm(v){ const l=Math.hypot(v[0],v[1],v[2])||1; return [v[0]/l,v[1]/l,v[2]/l]; }
+  function nrm(v){ const l=Math.hypot(v[0],v[1],v[2])||1; return [v[0]/l,v[1]/l,v[2]/l]; }
 
   function build(){
     const seg=+segEl.value, ring=Math.max(3,Math.round(seg*0.7));
     const V=[], Nv=[], F=[];
-    const push=(p,n)=>{ V.push(p); Nv.push(norm(n)); return V.length-1; };
+    const push=(p,n)=>{ V.push(p); Nv.push(nrm(n)); return V.length-1; };
     if(shape==='sphere'){
       for(let i=0;i<=ring;i++){
         const phi=Math.PI*i/ring;
@@ -2527,61 +2615,88 @@ document.addEventListener('pointerdown', e=>{
         for(let j=0;j<seg;j++) F.push([cTop, seg+1+j, seg+2+j]);
       }
     }
-    mesh={V,Nv,F};
-    vCount.textContent=V.length.toLocaleString();
-    tCount.textContent=F.length.toLocaleString();
-    mCount.textContent=(V.length*60).toLocaleString();
+    /* flatten into typed arrays and pre-allocate every per-frame buffer */
+    const nV=V.length, nF=F.length;
+    mesh={nV,nF,
+      V:new Float32Array(nV*3), Nv:new Float32Array(nV*3), F:new Uint32Array(nF*3),
+      RV:new Float32Array(nV*3), RN:new Float32Array(nV*3),
+      PX:new Float32Array(nV), PY:new Float32Array(nV),
+      D:new Float32Array(nF), TN:new Float32Array(nF*3), TM:new Float32Array(nF*3),
+      order:new Uint32Array(nF)};
+    for(let i=0;i<nV;i++){
+      mesh.V.set(V[i],i*3); mesh.Nv.set(Nv[i],i*3);
+    }
+    for(let i=0;i<nF;i++) mesh.F.set(F[i],i*3);
+    vCount.textContent=nV.toLocaleString();
+    tCount.textContent=nF.toLocaleString();
+    mCount.textContent=(nV*60).toLocaleString();
   }
 
   function draw(){
+    const m=mesh, nV=m.nV, nF=m.nF, V=m.V, Nv=m.Nv, F=m.F, RV=m.RV, RN=m.RN,
+          PX=m.PX, PY=m.PY, D=m.D, TN=m.TN, TM=m.TM, order=m.order;
     const W=cv.width, H=cv.height, cx=W/2, cy=H/2, S=210, F0=4.2;
     ctx.clearRect(0,0,W,H);
-    const base=hexRGB(css('--rate')), soft=css('--soft'), movie=css('--movie');
+    const base=hexRGB(css('--rate')), movie=css('--movie');
     const ang=+litEl.value*Math.PI/180;
-    const L=norm([Math.cos(ang), 0.55, Math.sin(ang)]);
+    let lx=Math.cos(ang), ly=0.55, lz=Math.sin(ang);
+    const ll=Math.hypot(lx,ly,lz); lx/=ll; ly/=ll; lz/=ll;
+    const smooth=(mode==='smooth');
 
     const cy1=Math.cos(yaw), sy1=Math.sin(yaw), cp=Math.cos(pitch), sp=Math.sin(pitch);
-    function rot(p){
-      const x=p[0]*cy1 + p[2]*sy1;
-      const z=-p[0]*sy1 + p[2]*cy1;
-      const y=p[1]*cp - z*sp;
-      const z2=p[1]*sp + z*cp;
-      return [x,y,z2];
+    for(let i=0;i<nV;i++){
+      const j=i*3;
+      const x=V[j], y=V[j+1], z=V[j+2];
+      const rx=x*cy1+z*sy1, rz=-x*sy1+z*cy1;
+      const ry=y*cp-rz*sp, rz2=y*sp+rz*cp;
+      RV[j]=rx; RV[j+1]=ry; RV[j+2]=rz2;
+      const d=F0/(F0-rz2);
+      PX[i]=cx+rx*S*d; PY[i]=cy-ry*S*d;
+      if(smooth){
+        const nx=Nv[j], ny=Nv[j+1], nz=Nv[j+2];
+        const qx=nx*cy1+nz*sy1, qz=-nx*sy1+nz*cy1;
+        RN[j]=qx; RN[j+1]=ny*cp-qz*sp; RN[j+2]=ny*sp+qz*cp;
+      }
     }
-    function proj(p){
-      const d=F0/(F0-p[2]);
-      return [cx+p[0]*S*d, cy-p[1]*S*d, p[2]];
+
+    /* per-triangle normal (cross product), midpoint depth */
+    for(let t=0;t<nF;t++){
+      const t3=t*3, a=F[t3]*3, b=F[t3+1]*3, c=F[t3+2]*3;
+      const ux=RV[b]-RV[a], uy=RV[b+1]-RV[a+1], uz=RV[b+2]-RV[a+2];
+      const vx=RV[c]-RV[a], vy=RV[c+1]-RV[a+1], vz=RV[c+2]-RV[a+2];
+      let nx=uy*vz-uz*vy, ny=uz*vx-ux*vz, nz=ux*vy-uy*vx;
+      const nl=Math.hypot(nx,ny,nz)||1; nx/=nl; ny/=nl; nz/=nl;
+      const mx=(RV[a]+RV[b]+RV[c])/3, my=(RV[a+1]+RV[b+1]+RV[c+1])/3, mz=(RV[a+2]+RV[b+2]+RV[c+2])/3;
+      if(nx*mx+ny*my+nz*mz<0){ nx=-nx; ny=-ny; nz=-nz; }
+      TN[t3]=nx; TN[t3+1]=ny; TN[t3+2]=nz;
+      TM[t3]=mx; TM[t3+1]=my; TM[t3+2]=mz;
+      D[t]=mz; order[t]=t;
     }
-    const RV=mesh.V.map(rot), RN=mesh.Nv.map(rot), PV=RV.map(proj);
+    order.sort((p,q)=>D[p]-D[q]);   // painter's algorithm: far to near
 
-    const tris=mesh.F.map(f=>{
-      const a=RV[f[0]], b=RV[f[1]], c=RV[f[2]];
-      const u=[b[0]-a[0],b[1]-a[1],b[2]-a[2]], v=[c[0]-a[0],c[1]-a[1],c[2]-a[2]];
-      let n=norm([u[1]*v[2]-u[2]*v[1], u[2]*v[0]-u[0]*v[2], u[0]*v[1]-u[1]*v[0]]);
-      const mid=[(a[0]+b[0]+c[0])/3,(a[1]+b[1]+c[1])/3,(a[2]+b[2]+c[2])/3];
-      if(n[0]*mid[0]+n[1]*mid[1]+n[2]*mid[2] < 0) n=[-n[0],-n[1],-n[2]];
-      return {f, n, d:(a[2]+b[2]+c[2])/3, mid};
-    }).sort((x,y)=>x.d-y.d);
-
-    tris.forEach(t=>{
-      const p0=PV[t.f[0]], p1=PV[t.f[1]], p2=PV[t.f[2]];
-      const area=(p1[0]-p0[0])*(p2[1]-p0[1])-(p2[0]-p0[0])*(p1[1]-p0[1]);
-      if(area>0) return;               // backface culling, like a GPU does
+    for(let k=0;k<nF;k++){
+      const t=order[k], t3=t*3, ia=F[t3], ib=F[t3+1], ic=F[t3+2];
+      const x0=PX[ia], y0=PY[ia], x1=PX[ib], y1=PY[ib], x2=PX[ic], y2=PY[ic];
+      const area=(x1-x0)*(y2-y0)-(x2-x0)*(y1-y0);
+      if(area>0) continue;               // backface culling, like a GPU does
       let lit;
-      if(mode==='smooth'){
+      if(smooth){
         lit=0;
-        t.f.forEach(i=>{ const n=RN[i]; lit+=Math.max(0, n[0]*L[0]+n[1]*L[1]+n[2]*L[2]); });
+        let j=ia*3, d=RN[j]*lx+RN[j+1]*ly+RN[j+2]*lz; if(d>0) lit+=d;
+        j=ib*3; d=RN[j]*lx+RN[j+1]*ly+RN[j+2]*lz; if(d>0) lit+=d;
+        j=ic*3; d=RN[j]*lx+RN[j+1]*ly+RN[j+2]*lz; if(d>0) lit+=d;
         lit/=3;
       } else {
-        lit=Math.max(0, t.n[0]*L[0]+t.n[1]*L[1]+t.n[2]*L[2]);
+        lit=TN[t3]*lx+TN[t3+1]*ly+TN[t3+2]*lz;
+        if(lit<0) lit=0;
       }
       const spec=Math.pow(lit, 22)*0.55;
-      const k=0.18+lit*0.82;
-      const col='rgb('+Math.round(Math.min(255,base[0]*k+spec*255))+','+
-        Math.round(Math.min(255,base[1]*k+spec*255))+','+
-        Math.round(Math.min(255,base[2]*k+spec*255))+')';
+      const kk=0.18+lit*0.82;
+      const col='rgb('+Math.min(255,Math.round(base[0]*kk+spec*255))+','+
+        Math.min(255,Math.round(base[1]*kk+spec*255))+','+
+        Math.min(255,Math.round(base[2]*kk+spec*255))+')';
       ctx.beginPath();
-      ctx.moveTo(p0[0],p0[1]); ctx.lineTo(p1[0],p1[1]); ctx.lineTo(p2[0],p2[1]); ctx.closePath();
+      ctx.moveTo(x0,y0); ctx.lineTo(x1,y1); ctx.lineTo(x2,y2); ctx.closePath();
       if(mode==='wire'){
         ctx.strokeStyle=col; ctx.lineWidth=1.2; ctx.stroke();
       } else {
@@ -2590,20 +2705,24 @@ document.addEventListener('pointerdown', e=>{
         if(showEdges){ ctx.strokeStyle='rgba(255,255,255,.28)'; ctx.lineWidth=1; ctx.stroke(); }
       }
       if(showNormals){
-        const m=proj(t.mid);
-        const e=proj([t.mid[0]+t.n[0]*0.28, t.mid[1]+t.n[1]*0.28, t.mid[2]+t.n[2]*0.28]);
+        const mx=TM[t3], my=TM[t3+1], mz=TM[t3+2];
+        const d1=F0/(F0-mz);
+        const ex=mx+TN[t3]*0.28, ey=my+TN[t3+1]*0.28, ez=mz+TN[t3+2]*0.28;
+        const d2=F0/(F0-ez);
         ctx.strokeStyle=movie; ctx.globalAlpha=.75; ctx.lineWidth=1.4;
-        ctx.beginPath(); ctx.moveTo(m[0],m[1]); ctx.lineTo(e[0],e[1]); ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(cx+mx*S*d1, cy-my*S*d1); ctx.lineTo(cx+ex*S*d2, cy-ey*S*d2);
+        ctx.stroke();
         ctx.globalAlpha=1;
       }
-    });
+    }
 
     // light direction indicator
-    ctx.strokeStyle=css('--movie'); ctx.globalAlpha=.6; ctx.lineWidth=3; ctx.setLineDash([7,7]);
-    ctx.beginPath(); ctx.moveTo(cx+L[0]*290, cy-L[1]*290); ctx.lineTo(cx+L[0]*230, cy-L[1]*230); ctx.stroke();
+    ctx.strokeStyle=movie; ctx.globalAlpha=.6; ctx.lineWidth=3; ctx.setLineDash([7,7]);
+    ctx.beginPath(); ctx.moveTo(cx+lx*290, cy-ly*290); ctx.lineTo(cx+lx*230, cy-ly*230); ctx.stroke();
     ctx.setLineDash([]); ctx.globalAlpha=1;
-    ctx.fillStyle=css('--movie');
-    ctx.beginPath(); ctx.arc(cx+L[0]*300, cy-L[1]*300, 9, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle=movie;
+    ctx.beginPath(); ctx.arc(cx+lx*300, cy-ly*300, 9, 0, Math.PI*2); ctx.fill();
   }
 
   function refresh(){
@@ -2651,11 +2770,12 @@ document.addEventListener('pointerdown', e=>{
   cv.style.touchAction='none';
   cv.style.cursor='grab';
 
+  window.addEventListener('themechange',()=>{ if(mesh) draw(); });
   refresh();
   loopIn(cv, ()=>{ if(spin && !dragging){ yaw+=0.006; draw(); } });
 })();
 
-/* ---------- 5.2 a small real ray tracer ---------- */
+/* ---------- 5.2 a small real ray tracer (zero allocation in the hot path, time-budgeted frames) ---------- */
 (function(){
   const cv=document.getElementById('cvRT'), ctx=cv.getContext('2d');
   const lx=document.getElementById('rtLx'), ly=document.getElementById('rtLy'),
@@ -2668,6 +2788,7 @@ document.addEventListener('pointerdown', e=>{
         pxEl=document.getElementById('rtPx');
   const mobile = Math.min(screen.width, screen.height) < 820;
   let hiRes=false, shadows=true, job=null, rays=0, t0=0;
+  let LX=0, LY=0, LZ=1.2, SHIN=48;
 
   const spheres=[
     {c:[-1.05,-0.15,3.3], r:0.85, col:[0.92,0.32,0.28], refl:0.25},
@@ -2675,6 +2796,10 @@ document.addEventListener('pointerdown', e=>{
     {c:[ 0.05,-0.62,2.5], r:0.38, col:[0.95,0.78,0.25], refl:0.15}
   ];
   const FLOOR=-1.0;
+
+  /* results are written into shared objects instead of allocating new ones per ray */
+  const HIT={t:Infinity, obj:null, kind:0};
+  const SCR=[new Float32Array(3),new Float32Array(3),new Float32Array(3),new Float32Array(3)];  // per-depth reflection results
 
   function hitScene(ox,oy,oz,dx,dy,dz){
     let best=Infinity, obj=null, kind=0;
@@ -2694,49 +2819,51 @@ document.addEventListener('pointerdown', e=>{
       const t=(FLOOR-oy)/dy;
       if(t>0.001 && t<best){ best=t; obj=null; kind=2; }
     }
-    return {t:best, obj, kind};
+    HIT.t=best; HIT.obj=obj; HIT.kind=kind;
   }
 
-  function trace(ox,oy,oz,dx,dy,dz,depth,L,shin){
+  function trace(ox,oy,oz,dx,dy,dz,depth,out){
     rays++;
-    const h=hitScene(ox,oy,oz,dx,dy,dz);
-    if(!h.kind || h.t===Infinity){
+    hitScene(ox,oy,oz,dx,dy,dz);
+    const kind=HIT.kind, ht=HIT.t, obj=HIT.obj;     // copy: later hitScene calls overwrite HIT
+    if(!kind || ht===Infinity){
       const k=0.5*(dy+1);
-      return [0.05+0.10*k, 0.07+0.14*k, 0.12+0.24*k];
+      out[0]=0.05+0.10*k; out[1]=0.07+0.14*k; out[2]=0.12+0.24*k;
+      return;
     }
-    const px=ox+dx*h.t, py=oy+dy*h.t, pz=oz+dz*h.t;
-    let nx,ny,nz,col,refl;
-    if(h.kind===1){
-      nx=(px-h.obj.c[0])/h.obj.r; ny=(py-h.obj.c[1])/h.obj.r; nz=(pz-h.obj.c[2])/h.obj.r;
-      col=h.obj.col; refl=h.obj.refl;
+    const px=ox+dx*ht, py=oy+dy*ht, pz=oz+dz*ht;
+    let nx,ny,nz,cr,cg,cb,refl;
+    if(kind===1){
+      nx=(px-obj.c[0])/obj.r; ny=(py-obj.c[1])/obj.r; nz=(pz-obj.c[2])/obj.r;
+      cr=obj.col[0]; cg=obj.col[1]; cb=obj.col[2]; refl=obj.refl;
     } else {
       nx=0; ny=1; nz=0;
-      const check=((Math.floor(px)+Math.floor(pz))&1)===0;
-      col=check?[0.82,0.82,0.86]:[0.16,0.17,0.24];
+      if(((Math.floor(px)+Math.floor(pz))&1)===0){ cr=0.82; cg=0.82; cb=0.86; }
+      else { cr=0.16; cg=0.17; cb=0.24; }
       refl=0.18;
     }
-    let ldx=L[0]-px, ldy=L[1]-py, ldz=L[2]-pz;
+    let ldx=LX-px, ldy=LY-py, ldz=LZ-pz;
     const ldist=Math.hypot(ldx,ldy,ldz); ldx/=ldist; ldy/=ldist; ldz/=ldist;
-    let lit=Math.max(0, nx*ldx+ny*ldy+nz*ldz);
+    let lit=nx*ldx+ny*ldy+nz*ldz; if(lit<0) lit=0;
     if(shadows && lit>0){
       rays++;
-      const sh2=hitScene(px+nx*0.002, py+ny*0.002, pz+nz*0.002, ldx,ldy,ldz);
-      if(sh2.kind && sh2.t<ldist) lit*=0.12;
+      hitScene(px+nx*0.002, py+ny*0.002, pz+nz*0.002, ldx,ldy,ldz);
+      if(HIT.kind && HIT.t<ldist) lit*=0.12;
     }
     // specular highlight: reflect the light around the normal, compare with the eye ray
     const rl=2*(nx*ldx+ny*ldy+nz*ldz);
     const sx=rl*nx-ldx, sy=rl*ny-ldy, sz=rl*nz-ldz;
-    const spec=Math.pow(Math.max(0, -(sx*dx+sy*dy+sz*dz)), shin)*0.9;
-    let r=col[0]*(0.12+lit*0.9)+spec;
-    let g=col[1]*(0.12+lit*0.9)+spec;
-    let b=col[2]*(0.12+lit*0.9)+spec;
+    let sp=-(sx*dx+sy*dy+sz*dz); if(sp<0) sp=0;
+    const spec=Math.pow(sp, SHIN)*0.9;
+    const amb=0.12+lit*0.9;
+    let r=cr*amb+spec, g=cg*amb+spec, b=cb*amb+spec;
     if(depth>0 && refl>0){
       const dn=2*(dx*nx+dy*ny+dz*nz);
-      const rc=trace(px+nx*0.002, py+ny*0.002, pz+nz*0.002,
-                     dx-dn*nx, dy-dn*ny, dz-dn*nz, depth-1, L, shin);
+      const rc=SCR[depth];
+      trace(px+nx*0.002, py+ny*0.002, pz+nz*0.002, dx-dn*nx, dy-dn*ny, dz-dn*nz, depth-1, rc);
       r=r*(1-refl)+rc[0]*refl; g=g*(1-refl)+rc[1]*refl; b=b*(1-refl)+rc[2]*refl;
     }
-    return [r,g,b];
+    out[0]=r; out[1]=g; out[2]=b;
   }
 
   function render(){
@@ -2745,36 +2872,39 @@ document.addEventListener('pointerdown', e=>{
     const H = Math.round(W*9/16);
     cv.width=W; cv.height=H;
     pxEl.textContent=W+'×'+H;
-    const im=ctx.createImageData(W,H), data=im.data;
-    const L=[+lx.value/10, +ly.value/10, 1.2];
-    const shin=+sh.value, depth=+bn.value;
+    const im=ctx.createImageData(W,H), data=im.data;   // clamped array: no Math.min needed
+    LX=+lx.value/10; LY=+ly.value/10; LZ=1.2;
+    SHIN=+sh.value;
+    const depth=+bn.value;
+    const px=new Float32Array(3);
     rays=0; t0=performance.now();
     let y=0;
-    const rowsPerFrame = hiRes? 6 : 12;
     function chunk(){
-      const end=Math.min(H, y+rowsPerFrame);
-      for(; y<end; y++){
+      const start=performance.now();
+      /* fill a ~10 ms slice of the frame: fast devices finish sooner, slow ones stay responsive */
+      do{
         for(let x=0;x<W;x++){
           const u=(x/W-0.5)*2*(W/H)*0.55;
           const v=-(y/H-0.5)*2*0.55;
-          const len=Math.hypot(u,v,1);
-          const c=trace(0,0.35,0, u/len, v/len, 1/len, depth, L, shin);
+          const len=Math.sqrt(u*u+v*v+1);
+          trace(0,0.35,0, u/len, v/len, 1/len, depth, px);
           const i=(y*W+x)*4;
-          data[i]  =Math.min(255, Math.sqrt(Math.max(0,c[0]))*255);
-          data[i+1]=Math.min(255, Math.sqrt(Math.max(0,c[1]))*255);
-          data[i+2]=Math.min(255, Math.sqrt(Math.max(0,c[2]))*255);
+          data[i]  =Math.sqrt(px[0]>0?px[0]:0)*255;
+          data[i+1]=Math.sqrt(px[1]>0?px[1]:0)*255;
+          data[i+2]=Math.sqrt(px[2]>0?px[2]:0)*255;
           data[i+3]=255;
         }
-      }
+        y++;
+      } while(y<H && performance.now()-start<10);
       ctx.putImageData(im,0,0);
-      prog.style.width=(y/H*100)+'%';
+      prog.style.transform='scaleX('+(y/H)+')';
       if(y<H){ job=requestAnimationFrame(chunk); }
       else {
         job=null;
         const ms=performance.now()-t0;
         raysEl.textContent=rays.toLocaleString();
         timeEl.textContent=Math.round(ms)+' ms';
-        setTimeout(()=>{ prog.style.width='0%'; }, 500);
+        setTimeout(()=>{ prog.style.transform='scaleX(0)'; }, 500);
       }
     }
     chunk();
@@ -2811,6 +2941,22 @@ document.addEventListener('pointerdown', e=>{
     io.observe(cv);
   } else render();
 })();
+
+/* ---------- off-screen sections: skip layout and paint until they are near the viewport ----------
+   Sizes are measured once first, so the page height (and nav-link jumps) stay accurate. */
+window.addEventListener('load', ()=>{
+  const enable = ()=>{
+    const secs=[...document.querySelectorAll('section.mod')];
+    const hs=secs.map(s=>s.offsetHeight);                       // one read pass
+    secs.forEach((s,i)=>{ s.style.containIntrinsicSize='auto '+hs[i]+'px'; });
+    document.body.classList.add('cv');
+  };
+  const ready = (document.fonts && document.fonts.ready) ? document.fonts.ready : Promise.resolve();
+  ready.then(()=>{
+    if(window.requestIdleCallback) requestIdleCallback(enable,{timeout:2000});
+    else setTimeout(enable,600);
+  });
+});
 </script>
 </body>
 </html>
